@@ -1,0 +1,4 @@
+/*
+  Access-Control-Allow-Origin: https://friendly-douhua-f4edfa.netlify.app/
+  Access-Control-Allow-Methods: GET, POST, OPTIONS
+  Access-Control-Allow-Headers: *

@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    declare global {
+    interface Window {
+    updateDisplay: () => void;
+    saveGame: () => void;
+    }
+    }
+    <script type="module">
+
+        import { Store } from './Store.js';
+        // 在游戏初始化后创建Store实例
+        let store;
+        function initGameState(savedData = {}) { // 强制设置默认空对象
+            const DEFAULT_VALUES = {
+                gold: 0,
+                pickaxeLevel: 1,
+                pickaxeCost: 10,
+                miners: 0,
+                minerCost: 50, // 新增关键字段
+                critChanceLevel: 1,
+                critMultiplierLevel: 1,
+                offlineMultiplierLevel: 1,
+                critChanceCost: 100,
+                critMultiplierCost: 150,
+                offlineMultiplierCost: 200,
+                prestige: 0
+            };
+
+            return {
+                ...DEFAULT_VALUES, // 优先使用默认值
+                ...savedData,      // 覆盖有效保存数据
+                // 重新计算派生属性
+                critChance: calculateCritChance(savedData),
+                critMultiplier: calculateCritMultiplier(savedData),
+                offlineMultiplier: calculateOfflineMultiplier(savedData)
+            };
+        }
+
+        // 专用计算函数
+        function calculateCritChance({ critChanceLevel = 1 }) {
+            const upgrades = critChanceLevel - 1;
+            return 0.1 + Math.min(upgrades, 5) * 0.03 + Math.max(upgrades - 5, 0) * 0.02;
+        }
+
+        function calculateCritMultiplier({ critMultiplierLevel = 1 }) {
+            return 2 + (critMultiplierLevel - 1) * 0.5;
+        }
+
+        function calculateOfflineMultiplier({ offlineMultiplierLevel = 1 }) {
+            return 1 + (offlineMultiplierLevel - 1) * 0.5;
+        }
+
+
+        function initGame() {
+            // 删除原有的全局变量声明，替换为：
+            let gameState = {
+                gold: savedData.gold || 0,
+                pickaxeLevel: savedData.pickaxeLevel || 1,
+                pickaxeCost: savedData.pickaxeCost || 10,
+                miners: savedData.miners || 0,
+                minerCost: savedData.minerCost || 50,
+                lastSave: savedData.lastSave || Date.now(),
+                // 添加默认值保护
+                critChanceLevel: savedData.critChanceLevel || 1,
+                critMultiplierLevel: savedData.critMultiplierLevel || 1,
+                critChanceCost: savedData.critChanceCost || 100,
+                critMultiplierCost: savedData.critMultiplierCost || 150,
+                offlineMultiplierLevel: savedData.offlineMultiplierLevel || 1,
+                offlineMultiplierCost: savedData.offlineMultiplierCost || 200,
+                upgradeSound: upgradeSound,
+                quests: savedData.quests || generateRandomQuests(3),
+                critChance: calculateCritChance(savedData),
+                critMultiplier: calculateCritMultiplier(savedData),
+                offlineMultiplier: calculateOfflineMultiplier(savedData),
+                prestige: savedData.prestige || 0, // 添加此行
+            };
+            store = new Store(gameState);
+            window.gameState = gameState;
+
+            // 移动离线收益计算到这里
+            const offlineSeconds = Math.floor((Date.now() - savedData.lastSave) / 1000);
+            if (offlineSeconds > 0) {
+                const offlineGold = Math.round(gameState.miners * offlineSeconds * gameState.offlineMultiplier
+                    * (1 + gameState.critChance * (gameState.critMultiplier - 1)));
+                if (offlineGold > 0) {
+                    gameState.gold += Math.round(offlineGold);
+                    showFloatingText(offlineGold.toFixed(1), true);
+                    const formattedTime = formatTime(offlineSeconds);
+                    setTimeout(() => {
+                        alert(`📦 离线收益\n\n离线时间：${formattedTime}\n获得金币：${Math.round(offlineGold)}`);
+                    }, 300);
+                }
+            }
+
+            updateDisplay(); // 确保在初始化后更新
+            // ...保持其余事件监听代码不变
+            document.getElementById('upgradePickaxe').onclick = () => store.upgradePickaxe();
+            document.getElementById('buyMiner').onclick = () => store.buyMiner();
+            document.getElementById('upgradeCritChance').onclick = () => store.upgradeCritChance();
+            document.getElementById('upgradeCritMultiplier').onclick = () => store.upgradeCritMultiplier();
+            document.getElementById('upgradeOfflineMultiplier').onclick = () => store.upgradeOfflineMultiplier();
+        }
+        // 初始化游戏
+        initGame();
+        updateQuests();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>金币矿工放置游戏</title>
+    <style>
+        /* 新增背景样式 */
+        body {
+            background-image: url("mine_bg.jpg");
+            background-size: cover;
+            background-repeat: no-repeat;
+            background-position: center;
+            background-attachment: fixed;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            min-height: 100vh;
+            position: relative;
+            background-color: rgba(42, 42, 42, 0.85);
+            /* 半透明深色叠加层 */
+            background-blend-mode: multiply;
+            /* 混合模式增强可读性 */
+        }
+
+        :root {
+            --gold: #ffd700;
+            --dark-bg: #2a2a2a;
+            --button-bg: #3a3a3a;
+            --button-hover: #4a4a4a;
+        }
+
+        /* 新增商店容器样式 */
+        #shop-container {
+            position: fixed;
+            left: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            padding: 20px;
+            width: 280px;
+            max-height: 90vh;
+            overflow-y: auto;
+            background: var(--dark-bg);
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            z-index: 999;
+        }
+
+        /* 调整标题位置 */
+        h2 {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            color: var(--gold);
+            margin: 0;
+            z-index: 1000;
+            background: var(--dark-bg);
+            padding: 10px 20px;
+            border-radius: 8px;
+            width: auto;
+        }
+
+        /* 修改商店商品项 */
+        .shop-item {
+            width: 100%;
+            margin: 0;
+        }
+
+        /* 金币计数器升级 */
+        #gold-counter {
+            position: fixed;
+            right: 20px;
+            top: 20px;
+            font-size: 28px;
+            /* 增大字号 */
+            color: #FFD700;
+            /* 使用更亮的金色 */
+            padding: 15px 25px;
+            background: rgba(0, 0, 0, 0.8);
+            /* 深色背景增加对比度 */
+            border-radius: 10px;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            /* 增强文字阴影 */
+            z-index: 1000;
+            /* 确保在最顶层 */
+        }
+
+        .mine-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 85vh;
+            /* 垂直居中 */
+        }
+
+        /* 挖矿主按钮特殊样式 */
+        .mine-container button {
+            background: linear-gradient(145deg, #cd983a, #b57a2a);
+            padding: 20px 40px;
+            font-size: 20px;
+            border-radius: 15px;
+        }
+
+        .mine-container button:hover:not(:disabled) {
+            background: linear-gradient(145deg, #ddaf4a, #c58b3a);
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            margin: 10px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(145deg, var(--button-bg), #333);
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* 按钮悬停效果 */
+        button:hover:not(:disabled) {
+            background: linear-gradient(145deg, var(--button-hover), #444);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+        }
+
+        /* 按钮点击效果 */
+        button:active:not(:disabled) {
+            transform: translateY(1px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        /* 按钮禁用状态 */
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            background: linear-gradient(145deg, #2a2a2a, #333);
+        }
+
+        /* 按钮金色边框特效 */
+        button::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 2px solid transparent;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+        }
+
+        button:hover::after {
+            border-color: var(--gold);
+        }
+
+
+        .shop-item button:hover:not(:disabled) {
+            background: linear-gradient(145deg, #4a6fdd, #3a5bb5);
+        }
+
+        .shop-item:hover {
+            transform: translateY(-5px);
+            border-color: var(--gold);
+        }
+
+        /* 数值显示美化 */
+        .shop-item h3 {
+            color: var(--gold);
+            margin: 8px 0;
+            font-size: 1.2em;
+        }
+
+        .shop-item p {
+            color: #ccc;
+            margin: 8px 0;
+        }
+
+        /* 修改暴击消息样式 */
+        #crit-message {
+            display: none;
+            position: fixed;
+            left: 50%;
+            top: 40%;
+            transform: translate(-50%, -50%);
+            font-size: 32px;
+            /* 增大字号 */
+            color: #FFD700;
+            text-shadow:
+                0 0 10px #FF4500,
+                /* 添加橙色光晕 */
+                2px 2px 4px rgba(0, 0, 0, 0.8);
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 9999;
+            /* 提升到最高层级 */
+            opacity: 0;
+            /* 初始不可见 */
+            transition: opacity 0.3s;
+            /* 添加过渡效果 */
+        }
+
+        /* 优化动画定义 */
+        @keyframes critAnim {
+            0% {
+                opacity: 1;
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(2);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        /* 镐子图标悬浮效果 */
+        .pickaxe {
+            transition: transform 0.3s ease;
+        }
+
+        .pickaxe:hover {
+            transform: rotate(15deg) scale(1.1);
+        }
+
+        @keyframes swing {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            50% {
+                transform: rotate(-30deg);
+            }
+
+            100% {
+                transform: rotate(0deg);
+            }
+        }
+
+        .swing-animation {
+            animation: swing 0.3s ease-in-out;
+        }
+
+        /* 暴击闪光特效 */
+        @keyframes goldFlash {
+            0% {
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 0.8;
+            }
+
+            100% {
+                opacity: 0;
+            }
+        }
+
+        .gold-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(255, 215, 0, 0.5) 10%, transparent 70%);
+            pointer-events: none;
+            animation: goldFlash 0.5s;
+        }
+
+        /* 暴击文字放大特效 */
+        @keyframes critScale {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(2);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .crit-scale {
+            animation: critScale 0.5s ease-out;
+        }
+
+        #reset-btn {
+            z-index: 1000;
+            padding: 12px 24px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+
+        #reset-btn:hover {
+            background: linear-gradient(145deg, #ff4444, #d11a1a);
+            transform: translateY(-2px);
+        }
+
+        #reset-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* 新增浮动文字样式 */
+        .floating-text {
+            position: fixed;
+            color: #FFD700;
+            font-size: 20px;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 9999;
+            animation: floatUp 1s ease-out forwards;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.8);
+            white-space: nowrap;
+            transform: translateX(-50%);
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translate(-50%, 0);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translate(-50%, -50px);
+                opacity: 0;
+            }
+        }
+
+        audio {
+            display: none;
+        }
+
+        /* 新增音乐按钮样式 */
+        #music-btn {
+            z-index: 1000;
+            padding: 12px 24px;
+            color: white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        #music-btn:hover {
+            background: linear-gradient(145deg, #5b7fef, #4a6bc5);
+            transform: translateY(-2px);
+        }
+
+        #music-btn:active {
+            transform: translateY(1px);
+        }
+
+        /* 新增任务系统样式 */
+        #quest-container {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 280px;
+            background: var(--dark-bg);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+            color: white;
+            max-height: 90vh;
+            overflow-y: auto;
+            z-index: 999;
+        }
+
+        .quest-item {
+            background: var(--button-bg);
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            border: 1px solid #444;
+        }
+
+        .quest-item.completed {
+            border-color: var(--gold);
+        }
+
+        .quest-reward {
+            color: var(--gold);
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- 新增背景音乐 -->
+    <audio id="bgm" loop>
+        <source src="mine_bgm.mp3" type="audio/mpeg">
+        您的浏览器不支持音频播放
+    </audio>
+    <div id="gold-counter">金币: 0</div>
+    <div id="prestige-counter"
+        style="position: fixed; right: 20px; top: 70px; font-size: 24px; color: #00ff00; padding: 12px 20px; background: rgba(0,0,0,0.8); border-radius: 8px;">
+        声望: <span id="prestige-value">0</span>
+    </div>
+
+    <div class="mine-container">
+        <button onclick="mineGold()" style="display: flex; flex-direction: column; align-items: center">
+            <img id="pickaxe-icon" src="pickaxe.png" class="pickaxe" style="margin-bottom: 8px" alt="pickaxe">
+            挖矿
+        </button>
+    </div>
+
+    <div id="crit-message"></div>
+
+    <h2>商店</h2>
+    <div id="shop-container">
+        <!-- 将全部商品项移入容器内 -->
+        <div class="shop-item">
+            <h3>镐等级（等级 <span id="pickaxe-level">1</span>）</h3>
+            <p>每次点击获得 <span id="click-value">1</span> 金币</p>
+            <button id="upgradePickaxe">升级（需要 <span id="pickaxe-cost">10</span> 金币）</button>
+        </div>
+
+        <div class="shop-item">
+            <h3>矿工助手（<span id="miner-count">0</span>）</h3>
+            <p>每秒自动获得 <span id="miner-value">0</span> 金币</p>
+            <button id="buyMiner">雇佣（需要 <span id="miner-cost">50</span> 金币）</button>
+        </div>
+
+        <div class="shop-item">
+            <h3>暴击概率（等级 <span id="crit-chance-level">1</span>）</h3>
+            <p>当前概率：<span id="current-crit-chance">10%</span></p>
+            <button id="upgradeCritChance">升级（需要 <span id="crit-chance-cost">100</span> 金币）</button>
+        </div>
+
+        <div class="shop-item">
+            <h3>暴击倍率（等级 <span id="crit-multiplier-level">1</span>）</h3>
+            <p>当前倍率：<span id="current-crit-multiplier">2</span>倍</p>
+            <button id="upgradeCritMultiplier">升级（需要 <span id="crit-multiplier-cost">150</span> 金币）</button>
+        </div>
+
+        <div class="shop-item">
+            <h3>离线收益（等级 <span id="offline-multiplier-level">1</span>）</h3>
+            <p>当前倍率：<span id="current-offline-multiplier">1</span>倍</p>
+            <button id="upgradeOfflineMultiplier">升级（需要 <span id="offline-multiplier-cost">200</span> 金币）</button>
+        </div>
+    </div>
+
+    <!-- 新增任务系统 -->
+    <div id="quest-container"></div>
+
+    <script>
+        // 在脚本顶部添加常量
+        const UPGRADE_MULTIPLIERS = {
+            pickaxe: 1.4,
+            miner: 1.25,
+            critChance: 1.8,
+            critMultiplier: 2,
+            offline: 2.2
+        };
+        // 在脚本顶部添加挖矿音效数组
+        const mineSounds = [
+            new Audio('mining1.wav'),
+            new Audio('mining2.wav'),
+            new Audio('mining3.wav')
+        ];
+        const critSound = new Audio('Critical.mp3');  // 新增暴击音效
+        // 在脚本顶部添加bgm变量
+        let bgm;
+
+        // 修改原来的音频初始化部分（替换原来的const bgm声明）
+        window.addEventListener('load', function () {
+            bgm = document.getElementById('bgm');
+            // ...保持原有自动播放逻辑不变...
+        });
+
+        // 新增音乐切换函数
+        function toggleBGM() {
+            const btn = document.getElementById('music-btn');
+            if (bgm.paused) {
+                bgm.play();
+                btn.textContent = "关闭音乐";
+            } else {
+                bgm.pause();
+                btn.textContent = "开启音乐";
+            }
+        }
+        // 在脚本最前面添加音频对象
+        const upgradeSound = new Audio('BuyUpgrade.wav');
+        // 加载保存数据
+        let savedData = JSON.parse(localStorage.getItem('goldMinerSave'));
+        const defaultValues = {
+            gold: 0,
+            pickaxeLevel: 1,
+            pickaxeCost: 10,
+            miners: 0,
+            minerCost: 50,
+            lastSave: Date.now(),
+            critChanceLevel: 1,
+            critMultiplierLevel: 1,
+            critChanceCost: 100,
+            critMultiplierCost: 150,
+            offlineMultiplierLevel: 1,
+            offlineMultiplierCost: 200,
+            prestige: 0
+        };
+
+        if (!savedData) {
+            savedData = { ...defaultValues };
+        } else {
+            // 强制转换并验证所有数值字段
+            const numberFields = [
+                'gold', 'pickaxeLevel', 'pickaxeCost', 'miners', 'minerCost', 'lastSave',
+                'critChanceLevel', 'critMultiplierLevel', 'critChanceCost', 'critMultiplierCost',
+                'offlineMultiplierLevel', 'offlineMultiplierCost', 'prestige'
+            ];
+
+            numberFields.forEach(field => {
+                // 添加||操作符提供默认值
+                const defaultValue = defaultValues[field];
+                const value = Number(savedData[field] || defaultValue);
+                savedData[field] = (!isNaN(value) && value >= 0) ? value : defaultValue;
+            });
+
+            // 确保lastSave为有效时间戳
+            if (savedData.lastSave > Date.now()) {
+                savedData.lastSave = Date.now();
+            }
+        }
+
+        // 初始化显示
+        //updateDisplay();
+
+        // 新增浮动文字显示函数
+        function showFloatingText(amount, isAuto) {
+            const floatingText = document.createElement('div');
+            floatingText.className = 'floating-text';
+            floatingText.textContent = `+${amount}金币${isAuto ? ' (自动)' : ''}`;
+
+            // 定位到不同元素
+            const target = isAuto
+                ? document.getElementById('gold-counter')
+                : document.querySelector('.mine-container button');
+
+            if (target) {
+                const rect = target.getBoundingClientRect();
+                floatingText.style.left = `${rect.left + rect.width / 2}px`;
+                floatingText.style.top = `${rect.top}px`;
+            }
+
+            document.body.appendChild(floatingText);
+            setTimeout(() => floatingText.remove(), 1000);
+        }
+
+        function mineGold() {
+            const pickaxe = document.getElementById("pickaxe-icon");
+            pickaxe.classList.add("swing-animation");
+            setTimeout(() => {
+                pickaxe.classList.remove("swing-animation");
+            }, 300);
+
+            // 随机播放挖矿音效
+            const randomSound = mineSounds[Math.floor(Math.random() * mineSounds.length)];
+            randomSound.currentTime = 0; // 重置播放位置
+            randomSound.play();
+
+            let base = window.gameState.pickaxeLevel;
+            if (Math.random() < window.gameState.critChance) {
+                base *= window.gameState.critMultiplier;
+                // 播放暴击音效
+                critSound.currentTime = 0; // 重置播放位置
+                critSound.play();
+
+                showCritMessage(`暴击! x${window.gameState.critMultiplier.toFixed(1)}`);
+                addGoldFlash();
+                document.getElementById("crit-message").classList.add("crit-scale");
+                setTimeout(() => {
+                    document.getElementById("crit-message").classList.remove("crit-scale");
+                }, 500);
+            }
+            window.gameState.gold += Math.round(base);
+            showFloatingText(base, false);
+            updateDisplay();
+            updateQuests(); // 添加此行以更新任务进度
+        }
+
+        function addGoldFlash() {
+            const flash = document.createElement("div");
+            flash.className = "gold-flash";
+            document.body.appendChild(flash);
+            setTimeout(() => flash.remove(), 500);
+        }
+
+        // 修改显示暴击消息的函数
+        function showCritMessage(msg) {
+            const critMsg = document.getElementById("crit-message");
+            critMsg.style.display = "block";
+            critMsg.textContent = msg;
+            critMsg.style.animation = "critAnim 1s";
+
+            setTimeout(() => {
+                critMsg.style.display = "none";
+            }, 1000);
+        }
+
+        function getClickValue() {
+            return window.gameState.pickaxeLevel;
+        }
+
+        // 升级系统和自动生产系统保持不变...
+
+        // 保存游戏数据
+        function saveGame() {
+            const saveData = {
+                gold: window.gameState.gold,
+                pickaxeLevel: window.gameState.pickaxeLevel,
+                pickaxeCost: window.gameState.pickaxeCost,
+                miners: window.gameState.miners,
+                minerCost: window.gameState.minerCost,
+                lastSave: Date.now(), // 保存当前时间，确保下次计算离线时间正确
+                critChanceLevel: window.gameState.critChanceLevel,
+                critMultiplierLevel: window.gameState.critMultiplierLevel,
+                critChanceCost: window.gameState.critChanceCost,
+                critMultiplierCost: window.gameState.critMultiplierCost,
+                offlineMultiplierLevel: window.gameState.offlineMultiplierLevel,
+                offlineMultiplierCost: window.gameState.offlineMultiplierCost,
+                quests: window.gameState.quests,
+                prestige: window.gameState.prestige// 添加声望属性
+            };
+            localStorage.setItem('goldMinerSave', JSON.stringify(saveData));
+        }
+
+        // 每5秒自动保存
+        setInterval(saveGame, 5000);
+
+        // 关闭页面时保存
+        window.addEventListener('beforeunload', saveGame);
+
+        setInterval(() => {
+            if (window.gameState.miners > 0) {
+                const autoGold = Math.round(window.gameState.miners * Math.pow(1.15, window.gameState.pickaxeLevel) * 0.3);
+                window.gameState.gold += Math.round(autoGold);
+                showFloatingText(Math.round(autoGold), true);
+                updateDisplay();
+                updateQuests();
+            }
+        }, 1000);
+
+        function updateDisplay() {
+            document.getElementById("gold-counter").textContent = `金币: ${window.gameState.gold}`;
+            document.getElementById("pickaxe-level").textContent = window.gameState.pickaxeLevel;
+            document.getElementById("click-value").textContent = window.gameState.pickaxeLevel; // getClickValue() 已简化
+            document.getElementById("pickaxe-cost").textContent = window.gameState.pickaxeCost;
+            document.getElementById("miner-count").textContent = window.gameState.miners;
+            (document.getElementById("miner-value").textContent =
+                Math.round(window.gameState.miners * window.gameState.pickaxeLevel * 0.5));
+            document.getElementById("miner-cost").textContent = window.gameState.minerCost;
+            document.getElementById("crit-chance-level").textContent = window.gameState.critChanceLevel;
+            document.getElementById("current-crit-chance").textContent = `${(window.gameState.critChance * 100).toFixed(1)}%`;
+            document.getElementById("crit-chance-cost").textContent = window.gameState.critChanceCost;
+            document.getElementById("crit-multiplier-level").textContent = window.gameState.critMultiplierLevel;
+            document.getElementById("current-crit-multiplier").textContent = window.gameState.critMultiplier.toFixed(1);
+            document.getElementById("crit-multiplier-cost").textContent = window.gameState.critMultiplierCost;
+            document.getElementById("offline-multiplier-level").textContent = window.gameState.offlineMultiplierLevel;
+            document.getElementById("current-offline-multiplier").textContent = window.gameState.offlineMultiplier.toFixed(1);
+            document.getElementById("offline-multiplier-cost").textContent = window.gameState.offlineMultiplierCost;
+            document.getElementById("prestige-value").textContent = window.gameState.prestige;
+
+            // 修复按钮禁用逻辑
+            document.querySelectorAll("button").forEach(btn => {
+                if (btn.textContent.includes("需要")) {
+                    const match = btn.textContent.match(/\d+/);
+                    if (match) {
+                        const cost = parseInt(match[0], 10);
+                        btn.disabled = window.gameState.gold < cost; // 使用 window.gameState
+                    } else {
+                        btn.disabled = true;
+                    }
+                }
+            });
+        }
+        function resetGame() {
+            if (confirm("确定要重置游戏吗？")) {
+                // 直接重置 window.gameState
+                window.gameState.gold = 0;
+                window.gameState.pickaxeLevel = 1;
+                window.gameState.pickaxeCost = 10;
+                window.gameState.miners = 0;
+                window.gameState.minerCost = 50;
+                window.gameState.critChanceLevel = 1;
+                window.gameState.critMultiplierLevel = 1;
+                window.gameState.critChanceCost = 100;
+                window.gameState.critMultiplierCost = 150;
+                window.gameState.offlineMultiplierLevel = 1;
+                window.gameState.offlineMultiplierCost = 200;
+                window.gameState.critChance = 0.1;
+                window.gameState.critMultiplier = 2;
+                window.gameState.offlineMultiplier = 1;
+                window.gameState.prestige = 0;
+                // 新增任务重置
+                window.gameState.quests = generateRandomQuests(3); // ← 这是关键修复
+
+                localStorage.removeItem('goldMinerSave');
+                updateDisplay();
+                updateQuests(); // ← 更新任务显示
+                alert("游戏已重置！");
+            }
+        }
+        // 在加载保存数据后添加时间格式化函数和弹窗逻辑
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            const parts = [];
+            if (hours > 0) parts.push(`${hours}小时`);
+            if (minutes > 0) parts.push(`${minutes}分钟`);
+            if (secs > 0 || parts.length === 0) parts.push(`${secs}秒`); // 至少显示秒数
+            return parts.join('');
+        }
+        // 在页面加载后尝试播放音乐
+        window.addEventListener('load', function () {
+            const bgm = document.getElementById('bgm');
+            // 处理浏览器自动播放限制
+            document.body.addEventListener('click', function firstPlay() {
+                bgm.play();
+                document.body.removeEventListener('click', firstPlay);
+            });
+
+            // 尝试自动播放
+            bgm.play().catch(() => {
+                console.log('需要用户交互后才能播放音频');
+            });
+        });
+
+        // 任务类型配置
+        const QUEST_TYPES = [
+            {
+                type: 'collect',
+                desc: '收集 {target} 金币',
+                progress: (game) => game.gold,
+                reward: (level) => Math.max(1, Math.floor(level / 2)) // 动态奖励
+            },
+            {
+                type: 'pickaxe',
+                desc: '升级镐子 {target} 次',
+                progress: (game) => game.pickaxeLevel - 1,
+                reward: (level) => Math.max(1, Math.floor(level / 2)) // 动态奖励
+            },
+            {
+                type: 'miner',
+                desc: '雇佣 {target} 个矿工',
+                progress: (game) => game.miners,
+                reward: (level) => Math.max(1, Math.floor(level / 2)) // 动态奖励
+            }
+        ];
+
+        // 生成随机任务
+        function generateRandomQuests(count) {
+            return Array.from({ length: count }, (_, i) => {
+                const type = QUEST_TYPES[Math.floor(Math.random() * QUEST_TYPES.length)];
+                // 更平滑的难度曲线
+                const baseDifficulty = 2 + Math.floor(window.gameState.prestige / 3);
+                // 动态乘数改为对数增长
+                const dynamicMultiplier = 1 + Math.log1p(window.gameState.prestige * 0.5);
+
+                let target;
+                switch (type.type) {
+                    case 'collect':
+                        target = Math.round((baseDifficulty * 30) * dynamicMultiplier);
+                        break;
+                    case 'pickaxe':
+                        target = Math.round(baseDifficulty * dynamicMultiplier);
+                        break;
+                    case 'miner':
+                        target = Math.round(baseDifficulty * 1.5 * dynamicMultiplier);
+                        break;
+                    default:
+                        target = baseDifficulty;
+                }
+
+                // 添加上限防止数值膨胀
+                target = Math.min(target, baseDifficulty * 100);
+                return {
+                    id: Date.now() + i,
+                    type: type.type,
+                    desc: type.desc.replace('{target}', target),
+                    target: target,
+                    progress: 0,
+                    reward: Math.max(1, Math.floor(baseDifficulty / 2)), // 动态奖励
+                    completed: false
+                };
+            });
+        }
+
+        // 更新任务显示
+        function updateQuests() {
+            const container = document.getElementById('quest-container');
+            container.innerHTML = '';
+
+            window.gameState.quests.forEach(quest => {
+                const progress = QUEST_TYPES.find(t => t.type === quest.type).progress(window.gameState);
+                const isCompleted = progress >= quest.target;
+
+                const questEl = document.createElement('div');
+                questEl.className = `quest-item ${isCompleted ? 'completed' : ''}`;
+                questEl.innerHTML = `
+            <div>${quest.desc}</div>
+            <div>进度: ${Math.min(progress, quest.target)}/${quest.target}</div>
+            <div class="quest-reward">
+                ${isCompleted ? '已完成' : `奖励: ${quest.reward}声望`}
+            </div>
+        `;
+
+                if (isCompleted && !quest.completed) {
+                    questEl.addEventListener('click', () => claimQuestReward(quest.id));
+                }
+
+                container.appendChild(questEl);
+            });
+        }
+
+        // 领取任务奖励
+        function claimQuestReward(questId) {
+            const quest = window.gameState.quests.find(q => q.id === questId);
+            if (!quest || quest.completed) return; // 防止重复处理
+
+            quest.completed = true; // 立即标记为已完成
+            window.gameState.prestige += quest.reward;
+            showFloatingText(`+${quest.reward}声望`, true);
+            updateDisplay();
+            saveGame();
+
+            // 立即生成新任务并更新显示
+            window.gameState.quests = window.gameState.quests.map(q =>
+                q.id === questId ? generateRandomQuests(1)[0] : q
+            );
+            updateQuests();
+        }
+    </script>
+    <button id="music-btn" onclick="toggleBGM()"
+        style="position: fixed; bottom: 70px; right: 20px; background: linear-gradient(145deg, #4a6fdd, #3a5bb5);">
+        关闭音乐
+    </button>
+</body>
+<button id="reset-btn" onclick="resetGame()"
+    style="position: fixed; bottom: 20px; right: 20px; background: linear-gradient(145deg, #dc3545, #c82333);">重置游戏</button>
+
+</html>
