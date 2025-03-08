@@ -2,12 +2,16 @@
 <html lang="en">
 
 <head>
+    fetch('/.netlify/functions/proxy.js')
+  .then(response => response.json())
+  .then(data => console.log(data))
     declare global {
     interface Window {
     updateDisplay: () => void;
     saveGame: () => void;
     }
     }
+    
     <script type="module">
 
         import { Store } from './Store.js';
