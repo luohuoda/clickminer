@@ -1,4 +1,4 @@
 /*
-  Access-Control-Allow-Origin: https://luohuoda.github.io/clickminer/
+  Access-Control-Allow-Origin: *
   Access-Control-Allow-Methods: GET, POST, OPTIONS
   Access-Control-Allow-Headers: *
