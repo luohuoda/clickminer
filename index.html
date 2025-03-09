@@ -8,8 +8,7 @@
     saveGame: () => void;
     }
     }
-    
-    <script type="module" >
+    <script type="module">
 
         import { Store } from './Store.js';
         // 在游戏初始化后创建Store实例
@@ -871,8 +870,8 @@
         function generateRandomQuests(count) {
             return Array.from({ length: count }, (_, i) => {
                 const type = QUEST_TYPES[Math.floor(Math.random() * QUEST_TYPES.length)];
-                // 更平滑的难度曲线
-                const baseDifficulty = 2 + Math.floor(window.gameState.prestige / 3);
+                // 确保从window.gameState安全读取prestige
+                const baseDifficulty = 2 + Math.floor((window.gameState?.prestige || 0) / 3);
                 // 动态乘数改为对数增长
                 const dynamicMultiplier = 1 + Math.log1p(window.gameState.prestige * 0.5);
 

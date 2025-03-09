@@ -2,7 +2,8 @@
 export class Store {
   constructor(gameState) {
     this.game = gameState;
-    this.initQuests();
+    // 延迟初始化任务，确保generateRandomQuests可用
+    setTimeout(() => this.initQuests(), 0);
   }
 
   initQuests() {
