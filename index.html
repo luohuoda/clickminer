@@ -55,7 +55,19 @@
 
 
         function initGame() {
+            const gameState = initGameState(savedData);
+            // 立即挂载到window对象
+            window.gameState = gameState;
+
+            // 延迟初始化Store以解决时序问题
+            setTimeout(() => {
+                store = new Store(gameState);
+                // 确保在此之后生成任务
+                gameState.quests = generateRandomQuests(3);
+                updateQuests();
+            }, 0);
             // 删除原有的全局变量声明，替换为：
+            /*
             let gameState = {
                 gold: savedData.gold || 0,
                 pickaxeLevel: savedData.pickaxeLevel || 1,
@@ -77,8 +89,9 @@
                 offlineMultiplier: calculateOfflineMultiplier(savedData),
                 prestige: savedData.prestige || 0, // 添加此行
             };
+            */
             store = new Store(gameState);
-            window.gameState = gameState;
+            //window.gameState = gameState;
 
             // 移动离线收益计算到这里
             const offlineSeconds = Math.floor((Date.now() - savedData.lastSave) / 1000);
@@ -867,11 +880,11 @@
         ];
 
         // 生成随机任务
-        function generateRandomQuests(count) {
+        window.generateRandomQuests = function (count) {
             return Array.from({ length: count }, (_, i) => {
-                const type = QUEST_TYPES[Math.floor(Math.random() * QUEST_TYPES.length)];
-                // 确保从window.gameState安全读取prestige
-                const baseDifficulty = 2 + Math.floor((window.gameState?.prestige || 0) / 3);
+                // 添加安全访问逻辑
+                const prestige = window.gameState?.prestige || 0;
+                const baseDifficulty = 2 + Math.floor(prestige / 3);
                 // 动态乘数改为对数增长
                 const dynamicMultiplier = 1 + Math.log1p(window.gameState.prestige * 0.5);
 

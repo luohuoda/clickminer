@@ -3,14 +3,8 @@ export class Store {
   constructor(gameState) {
     this.game = gameState;
     // 延迟初始化任务，确保generateRandomQuests可用
-    setTimeout(() => this.initQuests(), 0);
   }
 
-  initQuests() {
-    if (!this.game.quests || this.game.quests.length === 0) {  // 添加空数组检查
-      this.game.quests = generateRandomQuests(3);
-    }
-  }
 
   // 通用升级方法
   performUpgrade(costKey, levelKey, costMultiplier, callback) {
